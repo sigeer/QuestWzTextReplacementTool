@@ -27,7 +27,19 @@ namespace WinFormsApp1
         {
             this.Close();
 
-            OnSubmit?.Invoke(this, new WzVersion(WzMapleVersion.GMS, 83));
+            if (!short.TryParse(Text_Version.Text, out var gameVersion))
+            {
+                MessageBox.Show("游戏版本是数字类型");
+                return;
+            }
+            OnSubmit?.Invoke(this, new WzVersion(Enum.Parse<WzMapleVersion>(Combo_Type.Text), gameVersion));
+        }
+
+        private void WzVersionInputWin_Load(object sender, EventArgs e)
+        {
+            Combo_Type.Items.AddRange(Enum.GetNames<WzMapleVersion>());
+            Combo_Type.Text = WzMapleVersion.GMS.ToString();
+            Text_Version.Text = "83";
         }
     }
 

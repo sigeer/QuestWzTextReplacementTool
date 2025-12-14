@@ -1,5 +1,4 @@
 ﻿using MapleLib.WzLib;
-using System.ComponentModel;
 using WeifenLuo.WinFormsUI.Docking;
 
 namespace WinFormsApp1
@@ -11,9 +10,6 @@ namespace WinFormsApp1
         Panel newPanel;
         Panel finalPanel;
         TableLayoutPanel table;
-
-        private DockPanel dockPanel;
-        PendingListWin _pendingListWin;
 
         DataGridView gridA = new()
         {
@@ -45,8 +41,15 @@ namespace WinFormsApp1
         Button btnPreviousConflict = new Button() { Text = "上一个需要处理", AutoSize = true };
         #endregion
 
+        #region final
+        FlowLayoutPanel finalToolPanel;
+        Button btnCompleted = new Button() { Text = "解决", AutoSize = true };
+        Label finalWording = new Label() { AutoSize = true };
+        Button btnUseB = new Button() { Text = "使用新增项（新增）", AutoSize = true };
+        Button btnRemoveB = new Button() { Text = "移除新增项（放弃）", AutoSize = true };
+        #endregion
 
-        List<string> _allNodes = [];
+
         WzImage _imgA;
         WzImage _imgB;
         ImageContext _imgC;
@@ -78,19 +81,18 @@ namespace WinFormsApp1
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Height = 48,
             };
 
             btnNext.Click += (o, s) =>
             {
-                _currentNodeIndex++;
+                WorkContext.Instance.CurrentIndex++;
                 ShowCurrentNode();
             };
             btnPrevious.Click += (o, s) =>
             {
-                _currentNodeIndex--;
+                WorkContext.Instance.CurrentIndex--;
                 ShowCurrentNode();
             };
             btnNextConflict.Click += HandleClickNextConflict;
@@ -108,6 +110,22 @@ namespace WinFormsApp1
 
             // Panel C
             finalPanel = new Panel { BackColor = Color.LightSalmon, Dock = DockStyle.Fill };
+
+            finalToolPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Height = 36
+            };
+
+            finalToolPanel.Controls.Add(btnCompleted);
+            finalToolPanel.Controls.Add(finalWording);
+            finalToolPanel.Controls.Add(btnUseB);
+            finalToolPanel.Controls.Add(btnRemoveB);
+            btnUseB.Click += HandleUseB;
+            btnRemoveB.Click += HandleRemoveB;
+            btnCompleted.Click += HandleComplete;
 
             // 添加到布局
             table.Controls.Add(toolPanel, 0, 0);
@@ -175,7 +193,7 @@ namespace WinFormsApp1
                 HeaderText = "Value",
                 Name = "Value",
                 FillWeight = 50,
-                
+
             });
             gridC.Columns[0]!.ReadOnly = true;
             gridC.Columns[1]!.ReadOnly = true;
@@ -187,19 +205,51 @@ namespace WinFormsApp1
             newPanel.Controls.Add(gridB);
 
             finalPanel.Controls.Add(gridC);
-
-
-            Controls.Add(dockPanel);
+            finalPanel.Controls.Add(finalToolPanel);
 
             this.Controls.Add(table);
 
         }
 
+        private void HandleRemoveB(object? sender, EventArgs e)
+        {
+            var nodeName = WorkContext.Instance?.CurrentNode ;
+            if (nodeName == null)
+            {
+                return;
+            }
+            _imgC.RemoveNewItem(nodeName);
+            ShowCurrentNode();
+        }
+
+        private void HandleUseB(object? sender, EventArgs e)
+        {
+            var nodeName = WorkContext.Instance?.CurrentNode;
+            if (nodeName == null)
+            {
+                return;
+            }
+            _imgC.InserNewItem(nodeName);
+            ShowCurrentNode();
+        }
+
+
+        private void HandleComplete(object? sender, EventArgs e)
+        {
+            var nodeName = WorkContext.Instance?.CurrentNode;
+            if (nodeName == null)
+            {
+                return;
+            }
+            _imgC.HandlePendingItem(nodeName);
+            ShowCurrentNode();
+        }
+
         private void HandleFinalValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            var path = gridC.Rows[e.RowIndex].Cells[1].Value!.ToString()!;
+            var path = gridC.Rows[e.RowIndex].Cells[1].Value!.ToString()!.Replace(_imgB.Name + "\\", "");
             var value = gridC.Rows[e.RowIndex].Cells[2].Value!.ToString() ?? "";
-            _imgC.HandlePendingItems(_imgB.Name, path, value);
+            _imgC.SetPropertyValue(path, value);
 
             ShowCurrentNode();
         }
@@ -208,13 +258,6 @@ namespace WinFormsApp1
         {
             base.OnLoad(e);
 
-
-            dockPanel = new DockPanel();
-            dockPanel.Dock = DockStyle.Fill;
-            dockPanel.Theme = new VS2015LightTheme(); // VS 风格主题
-            _pendingListWin = new PendingListWin();
-            _pendingListWin.Show(dockPanel, DockState.DockLeftAutoHide);
-
             ResetDataSource();
         }
 
@@ -222,9 +265,8 @@ namespace WinFormsApp1
         {
             _imgA = WorkContext.Instance!.SourceFile.WzDirectory.GetImageByName(_imgB.Name);
             _imgC = WorkContext.Instance!.FinalData.GetValueOrDefault(_imgB.Name)!;
-            _allNodes = _imgB.WzProperties.Select(x => x.Name)
-                .Union(_imgA.WzProperties.Select(x => x.Name)).ToList();
-            _currentNodeIndex = 0;
+
+            WorkContext.Instance.CurrentIndex = 0;
             ShowCurrentNode();
         }
 
@@ -232,36 +274,63 @@ namespace WinFormsApp1
         int _conflictIndex = 0;
         void HandleClickNextConflict(object? sender, EventArgs e)
         {
+            if (WorkContext.Instance == null)
+                return;
+
             _conflictIndex++;
 
             if (_imgC.TryGetPendingItemsByIndex(_conflictIndex, out var questName))
             {
-                JumpTo(questName);
+                WorkContext.Instance.CurrentNode = questName!;
+                ShowNode();
             }
         }
 
         void HandleClickPreConflict(object? sender, EventArgs e)
         {
+            if (WorkContext.Instance == null)
+                return;
             _conflictIndex--;
 
             if (_imgC.TryGetPendingItemsByIndex(_conflictIndex, out var questName))
             {
-                JumpTo(questName);
+                WorkContext.Instance.CurrentNode = questName!;
+                ShowNode();
             }
-          
+
         }
 
-        public void JumpTo(string currentName)
+        void ShowNode()
         {
-            _currentNodeIndex = _allNodes.FindIndex(x => x == currentName);
-            if (_currentNodeIndex == -1)
-            {
+            if (WorkContext.Instance == null)
                 return;
-            }
-            var pendingList = _imgC.GetUnhandleItems();
-            infoLabel.Text = $"共有{_allNodes.Count}条，有{pendingList.Count}条需要手动处理。当前QuestId={currentName}";
 
-            var nodeA = _imgA.GetFromPath(currentName);
+            btnUseB.Visible = false;
+            btnRemoveB.Visible = false;
+            finalPanel.BackColor = Color.White;
+            finalWording.Text = "";
+            var allPendingItems = _imgC.GetAllPendingItems();
+            if (allPendingItems.TryGetValue(WorkContext.Instance.CurrentNode, out var pendingNode))
+            {
+                if (pendingNode.Type == PendingType.NewNode)
+                {
+                    finalWording.Text = "当前节点是新增的节点。";
+
+                    btnUseB.Visible = !_imgC.Image.WzProperties.Contains(pendingNode.Node);
+                    btnRemoveB.Visible = !btnUseB.Visible;
+                }
+
+                if (!pendingNode.Processed)
+                {
+                    finalPanel.BackColor = Color.LightPink;
+                }
+            }
+
+            finalWording.Text += "点击解决使更改生效。";
+
+            infoLabel.Text = $"共有{WorkContext.Instance!.AllNodes.Count}条，有{allPendingItems.Count(x => !x.Value.Processed)}/{allPendingItems.Count}条需要手动处理。当前QuestId={WorkContext.Instance.CurrentNode}";
+
+            var nodeA = _imgA.GetFromPath(WorkContext.Instance.CurrentNode);
 
             var allA = ImageUtils.FlatSelectNode(nodeA);
             foreach (var item in allA)
@@ -269,8 +338,8 @@ namespace WinFormsApp1
                 item.Name = item.Name.Replace(WorkContext.Instance!.SourceFile.Name + "\\", "").ToString();
             }
 
-            var allB = ImageUtils.FlatSelectNode(_imgB.GetFromPath(currentName));
-            var allC = ImageUtils.FlatSelectNode(_imgC.Image.GetFromPath(currentName));
+            var allB = ImageUtils.FlatSelectNode(_imgB.GetFromPath(WorkContext.Instance.CurrentNode));
+            var allC = ImageUtils.FlatSelectNode(_imgC.Image.GetFromPath(WorkContext.Instance.CurrentNode));
 
 
             gridA.Rows.Clear();
@@ -318,7 +387,12 @@ namespace WinFormsApp1
                     rowC.Cells.Add(new DataGridViewTextBoxCell() { Value = propC.Name });
                     rowC.Cells.Add(new DataGridViewTextBoxCell() { Value = propC.Value });
 
-                    if (pendingList != null && pendingList.Any(x=>x.Value.SubProps.Any(y => y.FullPath == prop) && !x.Value.Processed))
+                    if (propC.Type != WzPropertyType.String.ToString())
+                    {
+                        rowC.Cells[2].ReadOnly = true;
+                    }
+
+                    if (pendingNode != null && !pendingNode.Processed && (pendingNode.DiffSubProps.Any(x => x.FullPath == prop) || pendingNode.Type == PendingType.NewNode))
                     {
                         rowC.DefaultCellStyle.BackColor = Color.LightPink;
                     }
@@ -327,30 +401,17 @@ namespace WinFormsApp1
             }
         }
 
-        int _currentNodeIndex;
+
         public void ShowCurrentNode()
         {
-            if (WorkContext.Instance == null)
+            if (WorkContext.Instance == null || WorkContext.Instance.CurrentIndex < 0)
             {
+                MessageBox.Show("未开始工作/不存在的节点");
                 return;
             }
 
-            if (_allNodes.Count == 0)
-            {
-                return;
-            }
 
-            while (_currentNodeIndex < 0)
-            {
-                _currentNodeIndex += _allNodes.Count;
-            }
-            while (_currentNodeIndex >= _allNodes.Count)
-            {
-                _currentNodeIndex -= _allNodes.Count;
-            }
-
-            var questName = _allNodes[_currentNodeIndex];
-            JumpTo(questName);
+            ShowNode();
         }
     }
 }

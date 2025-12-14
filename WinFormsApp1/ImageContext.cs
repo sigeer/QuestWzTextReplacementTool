@@ -6,8 +6,10 @@ namespace WinFormsApp1
 {
     public class ImageContext : IDisposable
     {
-        public ImageContext(WzImage image)
+        internal Form1 MainForm { get; }
+        public ImageContext(Form1 form, WzImage image)
         {
+            MainForm = form;
             Image = image;
         }
 
@@ -16,36 +18,52 @@ namespace WinFormsApp1
 
         Dictionary<string, PendingItems> _pendingItems = [];
 
+        public bool HasItem(string nodeName)
+        {
+            return _pendingItems.ContainsKey(nodeName);
+        }
 
-        public void AddNewItem(WzImageProperty item)
+        public void TagNewItem(WzImageProperty item)
         {
             _pendingItems[item.Name] = new(PendingType.NewNode, item);
+
         }
-        //public void HanldeNewItems()
-        //{
-        //    foreach (var item in _newItems)
-        //    {
-        //        if (_processItems.Contains(item.Key))
-        //            continue;
 
-        //        Image.RemoveProperty(item.Key);
-        //        Image.AddProperty(item.Value);
-        //        _processItems.Add(item.Key);
-        //    }
-        //}
-
-        public void AddPendingItem(string nodeName, WzImageProperty property)
+        internal void InserNewItem(string nodeName)
         {
-            if (_pendingItems.TryGetValue(nodeName, out var data))
+            if (_pendingItems.TryGetValue(nodeName, out var node))
             {
-                data.SubProps.Add(property);
+                Image.RemoveProperty(nodeName);
+                Image.AddProperty(node.Node);
+                node.Processed = false;
+            }
+
+        }
+
+        internal void RemoveNewItem(string nodeName)
+        {
+            if (_pendingItems.TryGetValue(nodeName, out var node))
+            {
+                Image.RemoveProperty(nodeName);
+                node.Processed = false;
+            }
+
+        }
+
+        public void TagPendingItem(WzImageProperty item, WzImageProperty subProp)
+        {
+            if (_pendingItems.TryGetValue(item.Name, out var data))
+            {
+                data.DiffSubProps.Add(subProp);
             }
             else
             {
-                _pendingItems[nodeName] = data = new PendingItems(PendingType.PropertyChanged, property);
-                data.SubProps.Add(property);
+                _pendingItems[item.Name] = data = new PendingItems(PendingType.PropertyChanged, item);
+                data.DiffSubProps.Add(subProp);
             }
         }
+
+        public int GetPendingIndex(string item) => Array.IndexOf(_pendingItems.Keys.ToArray(), item);
 
         public bool TryGetPendingItemsByIndex(int index, out string? value)
         {
@@ -67,22 +85,30 @@ namespace WinFormsApp1
             return true;
         }
 
-        internal Dictionary<string, PendingItems> GetUnhandleItems()
+        internal Dictionary<string, PendingItems> GetAllPendingItems()
         {
             return _pendingItems;
         }
 
-        public void HandlePendingItems(string img, string path, string value)
+
+        public void SetPropertyValue(string path, string value)
         {
-            if (_pendingItems.TryGetValue(img, out var list))
+            var node = Image.GetFromPath(path.Replace("\\", "/"));
+            node.SetValue(value);
+
+            if (_pendingItems.TryGetValue(node.FullPath, out var n))
             {
-                var prop = list.SubProps.FirstOrDefault(x => x.FullPath == path);
-                if (prop != null)
-                {
-                    prop.SetValue(value);
-                    Image.RemoveProperty(path);
-                    Image.AddProperty(prop);
-                }
+                n.Processed = false;
+                MainForm.PendingListWin.ReloadData();
+            }
+        }
+
+        public void HandlePendingItem(string name)
+        {
+            if (_pendingItems.TryGetValue(name, out var item))
+            {
+                item.Processed = true;
+                MainForm.PendingListWin.ReloadData();
             }
         }
 
@@ -95,22 +121,22 @@ namespace WinFormsApp1
             return Image.Name.Equals("Check.img", StringComparison.OrdinalIgnoreCase) || Image.Name.Equals("Act.img", StringComparison.OrdinalIgnoreCase);
         }
 
-        public void ApplyQuestItemProperty(string imgName, WzImageProperty s1, WzImageProperty? s2)
+        public void ApplyQuestItemProperty(WzImageProperty rootNode, WzImageProperty s1, WzImageProperty? s2)
         {
             foreach (var prop in s1.WzProperties)
             {
                 if (prop.PropertyType == WzPropertyType.SubProperty)
                 {
-                    ApplyQuestItemProperty(imgName, prop, s2?.GetFromPath(prop.Name));
+                    ApplyQuestItemProperty(rootNode, prop, s2?.GetFromPath(prop.Name));
                 }
                 else if (prop.PropertyType == WzPropertyType.String)
                 {
-                    SetImgPropertyValue(imgName, s1, s2, prop.Name);
+                    SetImgPropertyValue(rootNode, s1, s2, prop.Name);
                 }
             }
         }
 
-        public void SetImgPropertyValue(string nodeName, WzImageProperty oldItem, WzImageProperty? newItem, string path)
+        public void SetImgPropertyValue(WzImageProperty rootNode, WzImageProperty oldItem, WzImageProperty? newItem, string path)
         {
             var iTag = oldItem.GetFromPath(path);
 
@@ -128,7 +154,7 @@ namespace WinFormsApp1
                 {
                     Log.Logger.Warning("{Path}：用于更新的文件不包含该节点", iTag.FullPath, iTag.WzValue);
 
-                    AddPendingItem(nodeName, iTag);
+                    TagPendingItem(rootNode, iTag);
                 }
 
                 else if (iTag.PropertyType == newTag.PropertyType)
@@ -138,7 +164,7 @@ namespace WinFormsApp1
 
                     if (isOldHasLetter ^ isNewHasLetter)
                     {
-                        AddPendingItem(nodeName, iTag);
+                        TagPendingItem(rootNode, iTag);
                     }
                     else
                     {
@@ -148,7 +174,7 @@ namespace WinFormsApp1
 
                 else
                 {
-                    AddPendingItem(nodeName, iTag);
+                    TagPendingItem(rootNode, iTag);
                 }
             }
             else
@@ -166,5 +192,7 @@ namespace WinFormsApp1
             Image.Dispose();
             _pendingItems.Clear();
         }
+
+
     }
 }

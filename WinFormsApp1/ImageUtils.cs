@@ -24,6 +24,7 @@ namespace WinFormsApp1
             {
                 if (item.PropertyType == WzPropertyType.SubProperty)
                 {
+                    all.Add(new TextProperty(item.PropertyType.ToString(), item.FullPath, ""));
                     FlatSelectNodeCore(all, item);
                 }
                 else

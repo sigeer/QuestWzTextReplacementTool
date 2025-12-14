@@ -92,6 +92,7 @@
             保存ToolStripMenuItem.Name = "保存ToolStripMenuItem";
             保存ToolStripMenuItem.Size = new Size(180, 22);
             保存ToolStripMenuItem.Text = "保存";
+            保存ToolStripMenuItem.Click += 保存ToolStripMenuItem_Click;
             // 
             // 设置ToolStripMenuItem
             // 
@@ -103,7 +104,7 @@
             // Menu_Run
             // 
             Menu_Run.Name = "Menu_Run";
-            Menu_Run.Size = new Size(180, 22);
+            Menu_Run.Size = new Size(124, 22);
             Menu_Run.Text = "执行更新";
             Menu_Run.Click += Menu_Run_Click;
             // 

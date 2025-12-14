@@ -79,6 +79,8 @@ namespace WinFormsApp1
                     _mainForm.ShowDocument(item.Value);
                 }
             }
+
+            _mainForm.PendingListWin.ReloadData();
         }
 
         public void OnNewTree_NodeMouseClick(object? sender, TreeNodeMouseClickEventArgs e)
@@ -127,18 +129,38 @@ namespace WinFormsApp1
                     {
                         selecteImage = e.Node.Text;
                     }
+
                     var itemAdd = new ToolStripMenuItem("导入" + selecteImage);
                     menu.Items.Add(itemAdd);
 
                     itemAdd.Click += (s, o) =>
                     {
-                        var file = SelectWzImage(selecteImage);
-                        if (file != null)
+                        if (selecteImage != "QuestInfo.img" && !WorkContext.Instance.NewData.ContainsKey("QuestInfo.img"))
                         {
-                            WorkContext.Instance.SetNewData(file);
-                            DrawNewDataByWz();
+
+                            var r = MessageBox.Show("必须先导入QuestInfo.img，或者你不想修改QuestInfo.img？（点击确定继续）", "选择", MessageBoxButtons.OKCancel);
+                            if (r == DialogResult.OK)
+                            {
+                                var file = SelectWzImage(selecteImage);
+                                if (file != null)
+                                {
+                                    WorkContext.Instance.SetNewData(file);
+                                    DrawNewDataByWz();
+                                }
+                            }
+                            return;
+                        }
+                        else
+                        {
+                            var file = SelectWzImage(selecteImage);
+                            if (file != null)
+                            {
+                                WorkContext.Instance.SetNewData(file);
+                                DrawNewDataByWz();
+                            }
                         }
                     };
+
                 }
 
 
@@ -198,7 +220,7 @@ namespace WinFormsApp1
             var r = selectFileDialog.ShowDialog();
             if (r == DialogResult.OK)
             {
-                var versionWin = new WzVersionInputWin();
+                var versionWin = new WzVersionInputWin(false);
                 versionWin.OnSubmit += (s, o) =>
                 {
                     try

@@ -28,7 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.Combo_Type = new ComboBox();
+            Combo_Type = new ComboBox();
             Text_Version = new TextBox();
             Btn_Submit = new Button();
             Label_GameVerion = new Label();
@@ -37,11 +37,11 @@
             // 
             // Combo_Type
             // 
-            this.Combo_Type.FormattingEnabled = true;
-            this.Combo_Type.Location = new Point(124, 34);
-            this.Combo_Type.Name = "Combo_Type";
-            this.Combo_Type.Size = new Size(121, 25);
-            this.Combo_Type.TabIndex = 0;
+            Combo_Type.FormattingEnabled = true;
+            Combo_Type.Location = new Point(124, 34);
+            Combo_Type.Name = "Combo_Type";
+            Combo_Type.Size = new Size(121, 25);
+            Combo_Type.TabIndex = 0;
             // 
             // Text_Version
             // 
@@ -87,9 +87,10 @@
             Controls.Add(Label_GameVerion);
             Controls.Add(Btn_Submit);
             Controls.Add(Text_Version);
-            Controls.Add(this.Combo_Type);
+            Controls.Add(Combo_Type);
             Name = "WzVersionInputWin";
             Text = "WzVersionInputWin";
+            Load += WzVersionInputWin_Load;
             ResumeLayout(false);
             PerformLayout();
         }

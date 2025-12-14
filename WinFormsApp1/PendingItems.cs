@@ -8,19 +8,21 @@ namespace WinFormsApp1
         {
             Type = type;
             Node = nodeProperty;
-            SubProps = [];
+            DiffSubProps = [];
         }
 
         public PendingType Type { get; }
         public WzImageProperty Node { get; }
 
-        public HashSet<WzImageProperty> SubProps { get; }
+        public HashSet<WzImageProperty> DiffSubProps { get; }
         public bool Processed { get; set; }
     }
 
     internal enum PendingType
     {
         NewNode,
+        // 不支持移除node
+        //RemoveNode,
         PropertyChanged,
     }
 }
