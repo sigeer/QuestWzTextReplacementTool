@@ -1,11 +1,4 @@
 ﻿using MapleLib.WzLib;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Text;
-using System.Windows.Forms;
 
 namespace WinFormsApp1
 {
@@ -23,6 +16,13 @@ namespace WinFormsApp1
             }
         }
 
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            Btn_Submit.Focus();
+        }
+
         private void Btn_Submit_Click(object sender, EventArgs e)
         {
             this.Close();
@@ -32,6 +32,7 @@ namespace WinFormsApp1
                 MessageBox.Show("游戏版本是数字类型");
                 return;
             }
+
             OnSubmit?.Invoke(this, new WzVersion(Enum.Parse<WzMapleVersion>(Combo_Type.Text), gameVersion));
         }
 

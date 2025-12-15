@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using System.Xml.Linq;
-using WeifenLuo.WinFormsUI.Docking;
+﻿using WeifenLuo.WinFormsUI.Docking;
 
 namespace WinFormsApp1
 {
@@ -14,29 +8,29 @@ namespace WinFormsApp1
     internal class PendingListWin : DockContent
     {
         Form1 _mainForm;
-        ListBox _listView;
+        ListBox _listBox;
         public PendingListWin(Form1 mainForm)
         {
             _mainForm = mainForm;
             Text = "待手动处理";
 
-            _listView = new ListBox()
+            _listBox = new ListBox()
             {
                 Dock = DockStyle.Fill,
             };
-            _listView.SelectedValueChanged += (s, e) =>
+            _listBox.SelectedValueChanged += (s, e) =>
             {
                 if (WorkContext.Instance == null)
                 {
                     return;
                 }
 
-                if (_listView.SelectedItems.Count == 0)
+                if (_listBox.SelectedItems.Count == 0)
                 {
                     return;
                 }
 
-                var item = _listView.SelectedItem?.ToString();
+                var item = _listBox.SelectedItem?.ToString();
                 if (item == null)
                 {
                     return;
@@ -44,61 +38,71 @@ namespace WinFormsApp1
 
                 if (_mainForm.DockPanelCtrl.ActiveDocument is WorkSpaceWin doc)
                 {
-                    WorkContext.Instance.CurrentNode = item;
+                    WorkContext.Instance.CurrentNode = _dataSource[item];
                     doc.ShowCurrentNode();
                 }
             };
-            Controls.Add(_listView);
+            Controls.Add(_listBox);
 
         }
 
-        public void ReloadData()
+        Dictionary<string, string> _dataSource = new();
+        public void ResetView()
         {
-            if (WorkContext.Instance == null)
+            _dataSource.Clear();
+            _listBox.Items.Clear();
+
+            if (WorkContext.Instance != null)
             {
-                return;
-            }
-
-            Task.Run(() =>
-            {
-                if (WorkContext.Instance == null)
+                Task.Run(() =>
                 {
-                    return;
-                }
-
-
-                BeginInvoke(() =>
-                {
-                    if (_mainForm.DockPanelCtrl.ActiveDocument is WorkSpaceWin doc)
+                    if (WorkContext.Instance != null)
                     {
-                        _listView.BeginUpdate();
-                        _listView.Items.Clear();
-
-                        var current = WorkContext.Instance!.FinalData.GetValueOrDefault(doc.Text)?.GetAllPendingItems() ?? [];
-                        foreach (var item in current)
+                        BeginInvoke(() =>
                         {
-                            var str = item.Key;
-                            if (!item.Value.Processed)
+                            if (_mainForm.DockPanelCtrl.ActiveDocument is WorkSpaceWin doc)
                             {
-                                str += "（待处理）";
+                                _listBox.BeginUpdate();
+                                _listBox.Items.Clear();
+                                _dataSource.Clear();
+
+                                var current = WorkContext.Instance!.FinalData.GetValueOrDefault(doc.Text)?.GetAllPendingItems() ?? [];
+                                foreach (var item in current)
+                                {
+                                    var str = item.Key;
+                                    if (!item.Value.Processed)
+                                    {
+                                        str += "（待处理）";
+                                    }
+                                    _dataSource[str] = item.Key;
+                                    _listBox.Items.Add(str);
+                                }
+                                _listBox.EndUpdate();
                             }
-                            _listView.Items.Add(str);
-                        }
-                        _listView.EndUpdate();
+
+                            SyncSelectedItem();
+                        });
                     }
                 });
-            });
+            }
+
+
         }
 
         public void HandleNodeChange()
         {
+            SyncSelectedItem();
+        }
+
+        void SyncSelectedItem()
+        {
             if (_mainForm.DockPanelCtrl.ActiveDocument is WorkSpaceWin doc)
             {
                 int index = WorkContext.Instance?.FinalData?.GetValueOrDefault(doc.Text)?.GetPendingIndex(WorkContext.Instance.CurrentNode) ?? -1;
-                if (index >= 0 && _listView.Items.Count > 0)
+                if (index >= 0 && _listBox.Items.Count > 0)
                 {
-                    _listView.SelectedIndex = index; // 选中
-                    _listView.TopIndex = index;      // 自动滚动到该项
+                    _listBox.SelectedIndex = index; // 选中
+                    _listBox.TopIndex = index;      // 自动滚动到该项
                 }
             }
         }

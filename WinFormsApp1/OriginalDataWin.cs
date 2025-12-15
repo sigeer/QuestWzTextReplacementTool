@@ -5,8 +5,7 @@ namespace WinFormsApp1
 {
     internal class OriginalDataWin : DockContent
     {
-        TableLayoutPanel _bodyPanel;
-
+        TableLayoutPanel _layoutPanel;
 
 
         ContextMenuStrip menu = new ContextMenuStrip();
@@ -16,36 +15,38 @@ namespace WinFormsApp1
             Text = "已加载文件";
             _mainForm = main;
 
-            _bodyPanel = new TableLayoutPanel()
+            _layoutPanel = new TableLayoutPanel()
             {
                 Dock = DockStyle.Fill,
                 RowCount = 2
             };
             // 行 50% / 50%
-            _bodyPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            _bodyPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            _layoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            _layoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
             menu.Items.Add("导入");
 
-            Controls.Add(_bodyPanel);
+            Controls.Add(_layoutPanel);
         }
 
         TreeView? _tree;
         public void DrawData()
         {
-            if (WorkContext.Instance == null)
-                return;
+            _tree?.Nodes?.Clear();
 
-            if (_tree == null)
+            if (WorkContext.Instance != null)
             {
-                _tree = new() { Dock = DockStyle.Fill };
-                _bodyPanel.Controls.Add(_tree, 0, 0);
+                if (_tree == null)
+                {
+                    _tree = new() { Dock = DockStyle.Fill };
+                    _layoutPanel.Controls.Add(_tree, 0, 0);
+                }
+
+                _tree.Nodes.Add(
+                    new TreeNode(WorkContext.Instance.SourceFile.Name,
+                     WorkContext.Instance.SourceFile.WzDirectory.WzImages.Select(x => new TreeNode(x.Name)).ToArray()));
+                _tree.ExpandAll();
             }
-            _tree.Nodes.Clear();
-            _tree.Nodes.Add(
-                new TreeNode(WorkContext.Instance.SourceFile.Name,
-                 WorkContext.Instance.SourceFile.WzDirectory.WzImages.Select(x => new TreeNode(x.Name)).ToArray()));
-            _tree.ExpandAll();
 
             DrawNewDataByWz();
         }
@@ -56,31 +57,29 @@ namespace WinFormsApp1
 
         public void DrawNewDataByWz()
         {
-            if (WorkContext.Instance == null)
-                return;
-
-            if (_newTree == null)
+            _newTree?.Nodes?.Clear();
+            if (WorkContext.Instance != null)
             {
-                _newTree = new() { Dock = DockStyle.Fill };
-                _newTree.NodeMouseClick += OnNewTree_NodeMouseClick;
-                _bodyPanel.Controls.Add(_newTree, 0, 1);
-            }
-            _newTree.Nodes.Clear();
-
-            var node = new TreeNode("用于更新的文件",
-                 WorkContext.Instance.SourceFile.WzDirectory.WzImages.Select(x => new TreeNode(WorkContext.Instance.NewData.GetValueOrDefault(x.Name) == null ? x.Name + "（未导入）" : x.Name)).ToArray());
-            _newTree.Nodes.Add(node);
-            _newTree.ExpandAll();
-
-            foreach (var item in WorkContext.Instance.NewData)
-            {
-                if (item.Value != null)
+                if (_newTree == null)
                 {
-                    _mainForm.ShowDocument(item.Value);
+                    _newTree = new() { Dock = DockStyle.Fill };
+                    _newTree.NodeMouseClick += OnNewTree_NodeMouseClick;
+                    _layoutPanel.Controls.Add(_newTree, 0, 1);
+                }
+
+                var node = new TreeNode("用于更新的文件",
+                     WorkContext.Instance.SourceFile.WzDirectory.WzImages.Select(x => new TreeNode(WorkContext.Instance.NewData.GetValueOrDefault(x.Name) == null ? x.Name + "（未导入）" : x.Name)).ToArray());
+                _newTree.Nodes.Add(node);
+                _newTree.ExpandAll();
+
+                foreach (var item in WorkContext.Instance.NewData)
+                {
+                    if (item.Value != null)
+                    {
+                        _mainForm.ShowDocument(item.Key);
+                    }
                 }
             }
-
-            _mainForm.PendingListWin.ReloadData();
         }
 
         public void OnNewTree_NodeMouseClick(object? sender, TreeNodeMouseClickEventArgs e)
@@ -108,17 +107,15 @@ namespace WinFormsApp1
                     menu.Items.Add(itemAdd);
                     itemAdd.Click += (s, o) =>
                     {
-                        var file = SelectWzFile();
-                        if (file != null)
+                        SelectWzFile(file =>
                         {
                             WorkContext.Instance.SetNewData(file);
                             DrawNewDataByWz();
-                        }
+                        });
                     };
                 }
                 else
                 {
-
                     string selecteImage;
                     if (e.Node.Text.Contains("未导入"))
                     {
@@ -130,49 +127,51 @@ namespace WinFormsApp1
                         selecteImage = e.Node.Text;
                     }
 
+                    if (!ImageUtils.EffectImage(selecteImage))
+                    {
+                        MessageBox.Show("仅支持修改" + string.Join(", ", ImageUtils.EffectImages));
+                        return;
+                    }
+
                     var itemAdd = new ToolStripMenuItem("导入" + selecteImage);
                     menu.Items.Add(itemAdd);
 
                     itemAdd.Click += (s, o) =>
                     {
-                        if (selecteImage != "QuestInfo.img" && !WorkContext.Instance.NewData.ContainsKey("QuestInfo.img"))
+                        if (selecteImage != ImageUtils.QuestInfo && !WorkContext.Instance.NewData.ContainsKey(ImageUtils.QuestInfo))
                         {
 
                             var r = MessageBox.Show("必须先导入QuestInfo.img，或者你不想修改QuestInfo.img？（点击确定继续）", "选择", MessageBoxButtons.OKCancel);
                             if (r == DialogResult.OK)
                             {
-                                var file = SelectWzImage(selecteImage);
-                                if (file != null)
+                                SelectWzImage(selecteImage, file =>
                                 {
                                     WorkContext.Instance.SetNewData(file);
                                     DrawNewDataByWz();
-                                }
+                                });
+
                             }
                             return;
                         }
                         else
                         {
-                            var file = SelectWzImage(selecteImage);
-                            if (file != null)
+                            SelectWzImage(selecteImage, file =>
                             {
                                 WorkContext.Instance.SetNewData(file);
                                 DrawNewDataByWz();
-                            }
+                            });
                         }
                     };
 
                 }
-
-
 
                 // 在鼠标位置弹出菜单
                 menu.Show(_newTree, e.Location);
             }
         }
 
-        public static WzFile? SelectWzFile()
+        public static void SelectWzFile(Action<WzFile> action)
         {
-            WzFile? _workingWz = null;
             var selectFileDialog = new OpenFileDialog()
             {
                 Filter = "wz文件(*.wz)|*.wz"
@@ -185,34 +184,26 @@ namespace WinFormsApp1
                 {
                     try
                     {
-                        var _workingWz = new WzFile(selectFileDialog.FileName, o.GameVersion, o.Version);
+                        var inputWz = new WzFile(selectFileDialog.FileName, o.GameVersion, o.Version);
 
-                        _workingWz.ParseWzFile();
-                        if (!_workingWz.WzDirectory.Name.Equals("Quest.wz", StringComparison.OrdinalIgnoreCase))
+                        inputWz.ParseWzFile();
+                        if (!inputWz.WzDirectory.Name.Equals("Quest.wz", StringComparison.OrdinalIgnoreCase))
                         {
                             MessageBox.Show("仅支持Quest.wz");
                         }
-
-                        //foreach (var img in _workingWz.WzDirectory.WzImages)
-                        //{
-                        //    var doc = new WorkSpaceWin(img.Name);
-                        //    doc.Show(dockPanel, DockState.Document);
-                        //}
-
+                        action(inputWz);
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("仅支持Quest.wz");
+                        MessageBox.Show("仅支持Quest.wz, " + ex.ToString());
                     }
                 };
                 versionWin.ShowDialog();
             }
-            return _workingWz;
         }
 
-        public static WzImage? SelectWzImage(string imgName)
+        public static void SelectWzImage(string imgName, Action<WzImage> action)
         {
-            WzImage? newImg = null;
             var selectFileDialog = new OpenFileDialog()
             {
                 Filter = "img文件(*.img)|*.img"
@@ -223,20 +214,20 @@ namespace WinFormsApp1
                 var versionWin = new WzVersionInputWin(false);
                 versionWin.OnSubmit += (s, o) =>
                 {
+
                     try
                     {
+
                         var newImgStream = new FileStream(selectFileDialog.FileName, FileMode.Open, FileAccess.Read);
-                        newImg = new WzImage(imgName, newImgStream, o.Version);
-                        //newImg.ParseImage();
+                        action(new WzImage(imgName, newImgStream, o.Version));
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show("读取Image失败");
+                        MessageBox.Show("读取Image失败，" + ex.ToString());
                     }
                 };
                 versionWin.ShowDialog();
             }
-            return newImg;
         }
     }
 }

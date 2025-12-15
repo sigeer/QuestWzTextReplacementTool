@@ -284,6 +284,40 @@ namespace MapleLib.WzLib
         }
 
         /// <summary>
+        /// 基于FullPath获取
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
+        public WzImageProperty ResolveFullPath(string path)
+        {
+            if (reader != null) if (!parsed) ParseImage();
+
+            string[] segments = path.Split(new char[1] { '\\' }, System.StringSplitOptions.RemoveEmptyEntries);
+
+            // If the first segment is "..", return null
+            if (segments[0] == "..")
+                return null;
+
+            if (segments[0] == Name)
+                segments = segments.Skip(1).ToArray();
+
+            WzImageProperty ret = null;
+
+            foreach (string segment in segments)
+            {
+                // Check if the current property has a child with the matching name
+                ret = (ret == null ? this.properties : ret.WzProperties)
+                    .FirstOrDefault(iwp => iwp.Name == segment);
+
+                // If no matching child was found, return null
+                if (ret == null)
+                    return null;
+            }
+
+            return ret;
+        }
+
+        /// <summary>
         /// Adds a property to the WzImage
         /// </summary>
         /// <param name="prop">Property to add</param>

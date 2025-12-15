@@ -89,7 +89,7 @@
             Controls.Add(Text_Version);
             Controls.Add(Combo_Type);
             Name = "WzVersionInputWin";
-            Text = "WzVersionInputWin";
+            Text = "选择版本";
             Load += WzVersionInputWin_Load;
             ResumeLayout(false);
             PerformLayout();

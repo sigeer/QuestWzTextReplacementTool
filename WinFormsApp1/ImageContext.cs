@@ -1,6 +1,5 @@
 ﻿using MapleLib.WzLib;
 using Serilog;
-using System.Windows.Forms;
 
 namespace WinFormsApp1
 {
@@ -18,11 +17,12 @@ namespace WinFormsApp1
 
         Dictionary<string, PendingItems> _pendingItems = [];
 
-        public bool HasItem(string nodeName)
+        void SetItemProcessed(PendingItems item, bool processed)
         {
-            return _pendingItems.ContainsKey(nodeName);
-        }
+            item.Processed = processed;
+            MainForm.PendingListWin.ResetView();
 
+        }
         public void TagNewItem(WzImageProperty item)
         {
             _pendingItems[item.Name] = new(PendingType.NewNode, item);
@@ -35,7 +35,7 @@ namespace WinFormsApp1
             {
                 Image.RemoveProperty(nodeName);
                 Image.AddProperty(node.Node);
-                node.Processed = false;
+                SetItemProcessed(node, true);
             }
 
         }
@@ -45,7 +45,7 @@ namespace WinFormsApp1
             if (_pendingItems.TryGetValue(nodeName, out var node))
             {
                 Image.RemoveProperty(nodeName);
-                node.Processed = false;
+                SetItemProcessed(node, true);
             }
 
         }
@@ -91,15 +91,16 @@ namespace WinFormsApp1
         }
 
 
-        public void SetPropertyValue(string path, string value)
+        public void SetPropertyValue(string fullPath, string value)
         {
-            var node = Image.GetFromPath(path.Replace("\\", "/"));
+            var node = Image.ResolveFullPath(fullPath);
             node.SetValue(value);
 
-            if (_pendingItems.TryGetValue(node.FullPath, out var n))
+            var editingProp = _pendingItems.Values.FirstOrDefault(x => x.DiffSubProps.Any(y => y.FullPath == fullPath));
+            if (editingProp != null)
             {
-                n.Processed = false;
-                MainForm.PendingListWin.ReloadData();
+                SetItemProcessed(editingProp, false);
+                MainForm.PendingListWin.ResetView();
             }
         }
 
@@ -107,8 +108,8 @@ namespace WinFormsApp1
         {
             if (_pendingItems.TryGetValue(name, out var item))
             {
-                item.Processed = true;
-                MainForm.PendingListWin.ReloadData();
+                SetItemProcessed(item, true);
+                MainForm.PendingListWin.ResetView();
             }
         }
 
@@ -144,12 +145,6 @@ namespace WinFormsApp1
 
             if (iTag != null)
             {
-                if (iTag.PropertyType != WzPropertyType.String)
-                {
-                    Log.Logger.Verbose("{Path}：当前更新的节点不是String节点，跳过", iTag.FullPath);
-                    return;
-                }
-
                 if (newTag == null)
                 {
                     Log.Logger.Warning("{Path}：用于更新的文件不包含该节点", iTag.FullPath, iTag.WzValue);
@@ -157,8 +152,21 @@ namespace WinFormsApp1
                     TagPendingItem(rootNode, iTag);
                 }
 
+
                 else if (iTag.PropertyType == newTag.PropertyType)
                 {
+                    if (iTag.WzValue == newTag.WzValue)
+                    {
+                        // 相同跳过
+                        return;
+                    }
+
+                    if (Image.Name == ImageUtils.QuestInfo && iTag.PropertyType != WzPropertyType.String)
+                    {
+                        TagPendingItem(rootNode, iTag);
+                        return;
+                    }
+
                     var isOldHasLetter = iTag.GetString().Any(x => !char.IsDigit(x));
                     var isNewHasLetter = newTag.GetString().Any(x => !char.IsDigit(x));
 

@@ -32,7 +32,7 @@ namespace WinFormsApp1
             }
 
             richTextBox1.AppendText(text);
-            richTextBox1.SelectionStart = richTextBox1.TextLength;
+            richTextBox1.SelectionStart = Math.Max(0, richTextBox1.TextLength - 1);
             richTextBox1.ScrollToCaret();
         }
 

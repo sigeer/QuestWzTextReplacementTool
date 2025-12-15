@@ -1,12 +1,12 @@
 ﻿using MapleLib.WzLib;
 using Serilog;
-using WeifenLuo.WinFormsUI.Docking;
 
 namespace WinFormsApp1
 {
-    internal class WorkContext
+    internal class WorkContext: IDisposable
     {
-        public const string QuestInfo = "QuestInfo.img";
+
+
         internal static WorkContext? Instance { get; set; }
         internal Form1 MainForm { get; }
         public WorkContext(Form1 form, WzFile sourceFile)
@@ -14,28 +14,31 @@ namespace WinFormsApp1
             MainForm = form;
             SourceFile = sourceFile;
 
-            AllNodes = SourceFile.WzDirectory.GetImageByName(QuestInfo).WzProperties.Select(x => x.Name).ToList();
+            AllNodes = SourceFile.WzDirectory.GetImageByName(ImageUtils.QuestInfo).WzProperties.Select(x => x.Name).ToList();
             CurrentNode = AllNodes[0];
         }
 
-        public EventHandler<string>? OnNodeChanged { get; set; }
 
         string _currentNode = null!;
-        public string CurrentNode { get => _currentNode; 
-            set 
-            { 
+        public string CurrentNode
+        {
+            get => _currentNode;
+            set
+            {
                 _currentNode = value;
 
                 _currentIndex = AllNodes.FindIndex(x => x == _currentNode);
                 MainForm.PendingListWin.HandleNodeChange();
-            } 
+            }
         }
 
         int _currentIndex;
-        public int CurrentIndex { 
-            get => _currentIndex; 
+        public int CurrentIndex
+        {
+            get => _currentIndex;
             set
             {
+                _currentIndex = value;
                 while (_currentIndex < 0)
                 {
                     _currentIndex += WorkContext.Instance!.AllNodes.Count;
@@ -46,7 +49,7 @@ namespace WinFormsApp1
                 }
                 _currentNode = AllNodes[_currentIndex];
                 MainForm.PendingListWin.HandleNodeChange();
-            } 
+            }
         }
         public List<string> AllNodes { get; private set; }
         public WzFile SourceFile { get; }
@@ -56,73 +59,71 @@ namespace WinFormsApp1
 
         public void SetNewData(WzFile file)
         {
-            foreach (var item in NewData)
-            {
-                item.Value?.Dispose();
-            }
-
-
             foreach (var item in file.WzDirectory.WzImages)
             {
-                NewData[item.Name]?.Dispose();
-                NewData[item.Name] = item;
-
-                FinalData[item.Name]?.Dispose();
-                FinalData[item.Name] = new ImageContext(
-                    MainForm,
-                    SourceFile.WzDirectory.GetImageByName(item.Name).DeepClone());
-
-                ApplyQuestImage(FinalData[file.Name]!, NewData[file.Name]!);
+                SetNewData(item);
             }
         }
 
         public void SetNewData(WzImage file)
         {
+            if (!ImageUtils.EffectImage(file.Name))
+            {
+                return;
+            }
+
             NewData.GetValueOrDefault(file.Name)?.Dispose();
             FinalData.GetValueOrDefault(file.Name)?.Dispose();
 
             NewData[file.Name] = file;
             FinalData[file.Name] = new ImageContext(
                 MainForm,
-                SourceFile.WzDirectory.GetImageByName(file.Name).DeepClone());
+                new WzImage(file.Name));
 
-            if (file.Name == QuestInfo)
+            if (file.Name == ImageUtils.QuestInfo)
             {
                 AllNodes = file.WzProperties.Select(x => x.Name).ToList();
             }
 
             ApplyQuestImage(FinalData[file.Name]!, NewData[file.Name]!);
+            MainForm.PendingListWin.ResetView();
         }
 
         void ApplyQuestImage(ImageContext context, WzImage newData)
         {
+            var sourceImg = SourceFile.WzDirectory.GetImageByName(context.Image.Name);
             foreach (var item in AllNodes)
             {
-                var targetItem = context.Image[item];
+                var sourceItem = sourceImg[item]?.DeepClone();
                 var newItem = newData[item]?.DeepClone();
 
-                if (targetItem == null && newItem != null)
+                if (sourceItem == null)
                 {
-                    context.TagNewItem(newItem);
+                    if (newItem != null)
+                    {
+                        context.TagNewItem(newItem);
+                    }
                 }
-                else if (targetItem != null)
+                else
                 {
                     if (newItem != null)
                     {
                         if (!context.IsIgnorePropertyOverwrite())
                         {
-                            context.ApplyQuestItemProperty(targetItem, targetItem, newItem);
+                            context.ApplyQuestItemProperty(sourceItem, sourceItem, newItem);
                         }
                     }
+                    context.Image.AddProperty(sourceItem);
                 }
+
             }
         }
 
         public bool CheckComplete()
         {
-            var sayData = FinalData.GetValueOrDefault("Say.img")?.Image.WzProperties.Select(x => x.Name) ?? [];
-            var actData = FinalData.GetValueOrDefault("Act.img")?.Image.WzProperties.Select(x => x.Name) ?? [];
-            var checkData = FinalData.GetValueOrDefault("Check.img")?.Image.WzProperties.Select(x => x.Name) ?? [];
+            var sayData = FinalData.GetValueOrDefault(ImageUtils.Say)?.Image.WzProperties.Select(x => x.Name) ?? [];
+            var actData = FinalData.GetValueOrDefault(ImageUtils.Act)?.Image.WzProperties.Select(x => x.Name) ?? [];
+            var checkData = FinalData.GetValueOrDefault(ImageUtils.Check)?.Image.WzProperties.Select(x => x.Name) ?? [];
 
             var sayMiss = AllNodes.Except(sayData);
             var actMiss = AllNodes.Except(actData);
@@ -131,23 +132,40 @@ namespace WinFormsApp1
             bool isCompleted = true;
             if (sayMiss.Count() != 0)
             {
-                Log.Logger.Warning("{Image} 缺少 {Items}", "Say.img", string.Join(',', sayMiss));
+                Log.Logger.Warning("{Image} 缺少 {Items}", ImageUtils.Say, string.Join(',', sayMiss));
                 isCompleted = false;
             }
 
             if (actMiss.Count() != 0)
             {
-                Log.Logger.Warning("{Image} 缺少 {Items}", "Act.img", string.Join(',', actMiss));
+                Log.Logger.Warning("{Image} 缺少 {Items}", ImageUtils.Act, string.Join(',', actMiss));
                 isCompleted = false;
             }
 
             if (checkMiss.Count() != 0)
             {
-                Log.Logger.Warning("{Image} 缺少 {Items}", "Check.img", string.Join(',', checkMiss));
+                Log.Logger.Warning("{Image} 缺少 {Items}", ImageUtils.Check, string.Join(',', checkMiss));
                 isCompleted = false;
             }
 
             return isCompleted;
+        }
+
+        public void Dispose()
+        {
+            foreach (var item in NewData)
+            {
+                item.Value?.Dispose();
+            }
+            foreach (var item in FinalData)
+            {
+                item.Value?.Dispose();
+            }
+            AllNodes.Clear();
+            SourceFile.Dispose();
+
+            Instance = null;
+            MainForm.Clear();
         }
     }
 }

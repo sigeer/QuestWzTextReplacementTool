@@ -5,12 +5,16 @@ namespace WinFormsApp1
 {
     internal class WorkSpaceWin : DockContent
     {
-        FlowLayoutPanel toolPanel;
-        Panel originalPanel;
-        Panel newPanel;
-        Panel finalPanel;
-        TableLayoutPanel table;
+        TableLayoutPanel table = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 2,
+            
+        };
 
+
+        #region 原始视图
         DataGridView gridA = new()
         {
             Dock = DockStyle.Fill,
@@ -18,6 +22,10 @@ namespace WinFormsApp1
             ReadOnly = true,
             AllowUserToAddRows = false
         };
+        Panel originalPanel = new Panel { BackColor = Color.LightBlue, Dock = DockStyle.Fill };
+        #endregion
+
+        #region 更新文件视图
         DataGridView gridB = new()
         {
             Dock = DockStyle.Fill,
@@ -25,14 +33,17 @@ namespace WinFormsApp1
             ReadOnly = true,
             AllowUserToAddRows = false
         };
-        DataGridView gridC = new()
-        {
-            Dock = DockStyle.Fill,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            AllowUserToAddRows = false,
-        };
+        Panel newPanel = new Panel { BackColor = Color.LightGreen, Dock = DockStyle.Fill };
+        #endregion
 
-        #region tools
+        #region 顶部控制栏
+        FlowLayoutPanel toolPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Height = 36,
+        };
         Label infoLabel = new Label() { AutoSize = true };
         Button btnNext = new Button() { Text = "下一条", AutoSize = true };
         Button btnPrevious = new Button() { Text = "上一条", AutoSize = true };
@@ -41,49 +52,48 @@ namespace WinFormsApp1
         Button btnPreviousConflict = new Button() { Text = "上一个需要处理", AutoSize = true };
         #endregion
 
-        #region final
-        FlowLayoutPanel finalToolPanel;
-        Button btnCompleted = new Button() { Text = "解决", AutoSize = true };
-        Label finalWording = new Label() { AutoSize = true };
-        Button btnUseB = new Button() { Text = "使用新增项（新增）", AutoSize = true };
-        Button btnRemoveB = new Button() { Text = "移除新增项（放弃）", AutoSize = true };
+        #region 最终视图
+        Panel finalPanel = new Panel { BackColor = Color.LightSalmon, Dock = DockStyle.Fill };
+        DataGridView gridC = new()
+        {
+            Dock = DockStyle.Fill,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            AllowUserToAddRows = false,
+        };
+        FlowLayoutPanel finalToolPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Height = 36
+        };
+        Button btnCompleted = new Button() { Text = "解决", AutoSize = true, Anchor = AnchorStyles.Top };
+        Label finalWording = new Label() { AutoSize = true, Anchor = AnchorStyles.Top };
+        Button btnUseB = new Button() { Text = "使用新增项（新增）并解决", AutoSize = true };
+        Button btnRemoveB = new Button() { Text = "移除新增项（放弃）并解决", AutoSize = true };
         #endregion
 
 
         WzImage _imgA;
         WzImage _imgB;
         ImageContext _imgC;
-        public WorkSpaceWin(WzImage newlyImage)
+        public WorkSpaceWin(string imgName)
         {
-            _imgB = newlyImage;
-            _imgA = WorkContext.Instance!.SourceFile.WzDirectory.GetImageByName(newlyImage.Name);
-            _imgC = WorkContext.Instance.FinalData.GetValueOrDefault(_imgB.Name)!;
-            this.Text = newlyImage.Name;
+            _imgB = WorkContext.Instance!.NewData.GetValueOrDefault(imgName)!;
+            _imgA = WorkContext.Instance!.SourceFile.WzDirectory.GetImageByName(imgName);
+            _imgC = WorkContext.Instance.FinalData.GetValueOrDefault(imgName)!;
 
-            table = new()
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
-                RowCount = 2
-            };
-
+            this.Text = imgName;
 
             // 行 50% / 50%
-            table.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
-            table.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
-            table.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
+            table.RowStyles.Add(new RowStyle(SizeType.Percent, 5));
+            table.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+            table.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
             // 列 50% / 50%
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
-            toolPanel = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Height = 48,
-            };
 
             btnNext.Click += (o, s) =>
             {
@@ -102,22 +112,7 @@ namespace WinFormsApp1
             toolPanel.Controls.Add(btnNext);
             toolPanel.Controls.Add(btnPreviousConflict);
             toolPanel.Controls.Add(btnNextConflict);
-            // Panel A
-            originalPanel = new Panel { BackColor = Color.LightBlue, Dock = DockStyle.Fill };
 
-            // Panel B
-            newPanel = new Panel { BackColor = Color.LightGreen, Dock = DockStyle.Fill };
-
-            // Panel C
-            finalPanel = new Panel { BackColor = Color.LightSalmon, Dock = DockStyle.Fill };
-
-            finalToolPanel = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Height = 36
-            };
 
             finalToolPanel.Controls.Add(btnCompleted);
             finalToolPanel.Controls.Add(finalWording);
@@ -247,8 +242,13 @@ namespace WinFormsApp1
 
         private void HandleFinalValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
-            var path = gridC.Rows[e.RowIndex].Cells[1].Value!.ToString()!.Replace(_imgB.Name + "\\", "");
-            var value = gridC.Rows[e.RowIndex].Cells[2].Value!.ToString() ?? "";
+            var path = gridC.Rows[e.RowIndex].Cells[1].Value?.ToString();
+            if (path == null)
+            {
+                return;
+            }
+
+            var value = gridC.Rows[e.RowIndex].Cells[2].Value?.ToString() ?? "";
             _imgC.SetPropertyValue(path, value);
 
             ShowCurrentNode();
@@ -258,15 +258,40 @@ namespace WinFormsApp1
         {
             base.OnLoad(e);
 
-            ResetDataSource();
+            ResetView();
         }
 
-        public void ResetDataSource()
+        protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            _imgA = WorkContext.Instance!.SourceFile.WzDirectory.GetImageByName(_imgB.Name);
-            _imgC = WorkContext.Instance!.FinalData.GetValueOrDefault(_imgB.Name)!;
+            if (!_allowClose && this.DockState == DockState.Document)
+            {
+                e.Cancel = true;
+                return;
+            }
 
-            WorkContext.Instance.CurrentIndex = 0;
+            base.OnFormClosing(e);
+        }
+
+        private bool _allowClose = false;   
+        public void ActualClose()
+        {
+            _allowClose = true;
+            this.Close();
+        }
+
+
+        public void ReloadDataSource(string imgName)
+        {
+            _imgB = WorkContext.Instance!.NewData.GetValueOrDefault(imgName)!;
+            _imgA = WorkContext.Instance!.SourceFile.WzDirectory.GetImageByName(imgName);
+            _imgC = WorkContext.Instance.FinalData.GetValueOrDefault(imgName)!;
+
+            ResetView();
+        }
+
+        public void ResetView()
+        {
+            WorkContext.Instance!.CurrentIndex = 0;
             ShowCurrentNode();
         }
 
@@ -277,9 +302,7 @@ namespace WinFormsApp1
             if (WorkContext.Instance == null)
                 return;
 
-            _conflictIndex++;
-
-            if (_imgC.TryGetPendingItemsByIndex(_conflictIndex, out var questName))
+            if (_imgC.TryGetPendingItemsByIndex(_conflictIndex++, out var questName))
             {
                 WorkContext.Instance.CurrentNode = questName!;
                 ShowNode();
@@ -290,9 +313,8 @@ namespace WinFormsApp1
         {
             if (WorkContext.Instance == null)
                 return;
-            _conflictIndex--;
 
-            if (_imgC.TryGetPendingItemsByIndex(_conflictIndex, out var questName))
+            if (_imgC.TryGetPendingItemsByIndex(_conflictIndex--, out var questName))
             {
                 WorkContext.Instance.CurrentNode = questName!;
                 ShowNode();
@@ -333,10 +355,10 @@ namespace WinFormsApp1
             var nodeA = _imgA.GetFromPath(WorkContext.Instance.CurrentNode);
 
             var allA = ImageUtils.FlatSelectNode(nodeA);
-            foreach (var item in allA)
-            {
-                item.Name = item.Name.Replace(WorkContext.Instance!.SourceFile.Name + "\\", "").ToString();
-            }
+            //foreach (var item in allA)
+            //{
+            //    item.Name = item.Name.Replace(WorkContext.Instance!.SourceFile.Name + "\\", "").ToString();
+            //}
 
             var allB = ImageUtils.FlatSelectNode(_imgB.GetFromPath(WorkContext.Instance.CurrentNode));
             var allC = ImageUtils.FlatSelectNode(_imgC.Image.GetFromPath(WorkContext.Instance.CurrentNode));
@@ -409,7 +431,6 @@ namespace WinFormsApp1
                 MessageBox.Show("未开始工作/不存在的节点");
                 return;
             }
-
 
             ShowNode();
         }
