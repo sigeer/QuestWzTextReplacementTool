@@ -10,5 +10,6 @@ Console.OutputEncoding = Encoding.Unicode;
 
 while (true)
 {
-    QuestProcessor.Run();
+    SameKeyProcessor.FindSameKeys();
+    // QuestProcessor.Run();
 }
