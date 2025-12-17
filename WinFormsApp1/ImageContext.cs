@@ -1,21 +1,89 @@
-﻿using MapleLib.WzLib;
+﻿using JiebaNet.Segmenter;
+using MapleLib.WzLib;
+using MapleLib.WzLib.WzProperties;
+using OpenCCNET;
 using Serilog;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace WinFormsApp1
 {
-    public class ImageContext : IDisposable
+    internal class ImageContext : IDisposable
     {
+        internal WorkContext Context { get; }
         internal Form1 MainForm { get; }
-        public ImageContext(Form1 form, WzImage image)
+        public ImageContext(WorkContext context, Form1 form, WzImage image)
         {
+            Context = context;
             MainForm = form;
             Image = image;
         }
+
+        string _currentNode = null!;
+        public string CurrentNode
+        {
+            get => _currentNode;
+            set
+            {
+                _currentNode = value;
+
+                _currentIndex = GetPendingItemView().IndexOf(_currentNode);
+                MainForm.PendingListWin.HandleNodeChange();
+                Context.CurrentNode = CurrentNode;
+            }
+        }
+
+        int _currentIndex;
+        public int CurrentIndex
+        {
+            get => _currentIndex;
+            set
+            {
+                _currentIndex = value;
+
+                var ds = GetPendingItemView();
+
+                while (_currentIndex < 0)
+                {
+                    _currentIndex += ds.Count;
+                }
+                while (_currentIndex >= ds.Count)
+                {
+                    _currentIndex -= ds.Count;
+                }
+                _currentNode = ds.ElementAt(_currentIndex);
+                MainForm.PendingListWin.HandleNodeChange();
+                Context.CurrentNode = _currentNode;
+            }
+        }
+
 
         public WzImage Image { get; set; }
 
 
         Dictionary<string, PendingItems> _pendingItems = [];
+        List<string>? _pendingItemView;
+        public List<string> GetPendingItemView()
+        {
+            return _pendingItemView ??= _pendingItems.Keys.ToList();
+        }
+
+        public List<string> GetEffectiveNodes()
+        {
+            if (Image.Name == ImageUtils.QuestInfo)
+            {
+                return Image.WzProperties.Select(x => x.Name).ToList(); ;
+            }
+            else
+            {
+                if (Context.FinalData.TryGetValue(ImageUtils.QuestInfo, out var questInfo))
+                    return questInfo.GetEffectiveNodes();
+                else
+
+                    return Context.SourceFile.WzDirectory.GetImageByName(ImageUtils.QuestInfo).WzProperties.Select(x => x.Name).ToList();
+            }
+        }
+
 
         void SetItemProcessed(PendingItems item, bool processed)
         {
@@ -23,28 +91,40 @@ namespace WinFormsApp1
             MainForm.PendingListWin.ResetView();
 
         }
+
+        internal bool IsAllProcessed() => _pendingItems.Values.Count == 0 || _pendingItems.Values.All(x => x.Processed);
+
         public void TagNewItem(WzImageProperty item)
         {
-            _pendingItems[item.Name] = new(PendingType.NewNode, item);
+            Image.AddProperty(ApplyQuestItemPropertyToSimplifed(item));
 
+            var data = new PendingItems(PendingType.NewNode, item);
+            _pendingItems[item.Name] = data;
+            if (Image.Name != ImageUtils.QuestInfo)
+            {
+                SetItemProcessed(data, true);
+            }
+            _pendingItemView = null;
         }
 
-        internal void InserNewItem(string nodeName)
+        internal void InserNewItem()
         {
-            if (_pendingItems.TryGetValue(nodeName, out var node))
+            if (_pendingItems.TryGetValue(CurrentNode, out var node))
             {
-                Image.RemoveProperty(nodeName);
-                Image.AddProperty(node.Node);
+                Image.RemoveProperty(CurrentNode);
+                Image.AddProperty(ApplyQuestItemPropertyToSimplifed(node.Node));
+
+
                 SetItemProcessed(node, true);
             }
 
         }
 
-        internal void RemoveNewItem(string nodeName)
+        internal void RemoveNewItem()
         {
-            if (_pendingItems.TryGetValue(nodeName, out var node))
+            if (_pendingItems.TryGetValue(CurrentNode, out var node))
             {
-                Image.RemoveProperty(nodeName);
+                Image.RemoveProperty(CurrentNode);
                 SetItemProcessed(node, true);
             }
 
@@ -61,6 +141,7 @@ namespace WinFormsApp1
                 _pendingItems[item.Name] = data = new PendingItems(PendingType.PropertyChanged, item);
                 data.DiffSubProps.Add(subProp);
             }
+            _pendingItemView = null;
         }
 
         public int GetPendingIndex(string item) => Array.IndexOf(_pendingItems.Keys.ToArray(), item);
@@ -85,9 +166,12 @@ namespace WinFormsApp1
             return true;
         }
 
-        internal Dictionary<string, PendingItems> GetAllPendingItems()
+        internal Dictionary<string, PendingItems> GetValidPendingItems()
         {
-            return _pendingItems;
+            if (Image.Name == ImageUtils.QuestInfo)
+                return _pendingItems;
+            else
+                return _pendingItems.Where(x => GetEffectiveNodes().Contains(x.Key)).ToDictionary();
         }
 
 
@@ -100,16 +184,14 @@ namespace WinFormsApp1
             if (editingProp != null)
             {
                 SetItemProcessed(editingProp, false);
-                MainForm.PendingListWin.ResetView();
             }
         }
 
-        public void HandlePendingItem(string name)
+        public void ResolvePendingItem()
         {
-            if (_pendingItems.TryGetValue(name, out var item))
+            if (_pendingItems.TryGetValue(CurrentNode, out var item))
             {
                 SetItemProcessed(item, true);
-                MainForm.PendingListWin.ResetView();
             }
         }
 
@@ -119,7 +201,7 @@ namespace WinFormsApp1
         /// <returns></returns>
         public bool IsIgnorePropertyOverwrite()
         {
-            return Image.Name.Equals("Check.img", StringComparison.OrdinalIgnoreCase) || Image.Name.Equals("Act.img", StringComparison.OrdinalIgnoreCase);
+            return Image.Name.Equals(ImageUtils.Check, StringComparison.OrdinalIgnoreCase) || Image.Name.Equals(ImageUtils.Act, StringComparison.OrdinalIgnoreCase);
         }
 
         public void ApplyQuestItemProperty(WzImageProperty rootNode, WzImageProperty s1, WzImageProperty? s2)
@@ -137,6 +219,7 @@ namespace WinFormsApp1
             }
         }
 
+        static Regex zhReg = new Regex("[\\u4e00-\\u9fa5]");
         public void SetImgPropertyValue(WzImageProperty rootNode, WzImageProperty oldItem, WzImageProperty? newItem, string path)
         {
             var iTag = oldItem.GetFromPath(path);
@@ -155,29 +238,51 @@ namespace WinFormsApp1
 
                 else if (iTag.PropertyType == newTag.PropertyType)
                 {
-                    if (iTag.WzValue == newTag.WzValue)
+
+                    if (iTag.PropertyType != WzPropertyType.String)
                     {
-                        // 相同跳过
+                        if (Image.Name == ImageUtils.QuestInfo && iTag.WzValue != newTag.WzValue)
+                        {
+                            TagPendingItem(rootNode, iTag);
+                        }
                         return;
                     }
 
-                    if (Image.Name == ImageUtils.QuestInfo && iTag.PropertyType != WzPropertyType.String)
-                    {
-                        TagPendingItem(rootNode, iTag);
-                        return;
-                    }
-
-                    var isOldHasLetter = iTag.GetString().Any(x => !char.IsDigit(x));
-                    var isNewHasLetter = newTag.GetString().Any(x => !char.IsDigit(x));
-
-                    if (isOldHasLetter ^ isNewHasLetter)
-                    {
-                        TagPendingItem(rootNode, iTag);
-                    }
                     else
                     {
-                        iTag.SetValue(newTag.WzValue);
+                        var iValue = iTag.GetString();
+                        var nValue = newTag.GetString();
+                        if (ImageUtils.ZhCompare(iValue, nValue))
+                        {
+                            return;
+                        }
+
+                        var hasZh1 = zhReg.IsMatch(iValue);
+                        var hasZh2 = zhReg.IsMatch(nValue);
+                        if (hasZh1)
+                        {
+                            if (hasZh2)
+                            {
+                                TagPendingItem(rootNode, iTag);
+                            }
+                            else
+                            {
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            if (hasZh2)
+                            {
+                                iTag.SetValue(newTag.WzValue);
+                            }
+                            else
+                            {
+                                return;
+                            }
+                        }
                     }
+
                 }
 
                 else
@@ -199,8 +304,38 @@ namespace WinFormsApp1
         {
             Image.Dispose();
             _pendingItems.Clear();
+            _pendingItemView?.Clear();
+            _pendingItemView = null;
         }
 
+        WzImageProperty ApplyQuestItemPropertyToSimplifed(WzImageProperty s1)
+        {
+            var data = new WzSubProperty(s1.Name);
+            foreach (var prop in s1.WzProperties)
+            {
+                if (prop.PropertyType == WzPropertyType.SubProperty)
+                {
+                    data.AddProperty(ApplyQuestItemPropertyToSimplifed(prop));
+                }
+                else
+                {
+                    data.AddProperty(SetImgPropertyValueSimplifed(prop));
+                }
+            }
+            return data;
+        }
 
+        WzImageProperty SetImgPropertyValueSimplifed(WzImageProperty data)
+        {
+            if (data.PropertyType == WzPropertyType.String)
+            {
+                return new WzStringProperty(data.Name, ZhConverter.HantToHans(data.GetString()));
+            }
+            else
+            {
+                return data.DeepClone();
+            }
+        }
     }
+
 }

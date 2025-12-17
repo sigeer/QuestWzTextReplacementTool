@@ -16,6 +16,7 @@ namespace WinFormsApp1
             DockPanelCtrl = new DockPanel();
             DockPanelCtrl.Dock = DockStyle.Fill;
             DockPanelCtrl.Theme = new VS2015LightTheme();
+
             DockPanelCtrl.ActiveDocumentChanged += HandleActiveDocumentChanged;
             this.toolStripContainer1.ContentPanel.Controls.Add(DockPanelCtrl);
 
@@ -26,7 +27,25 @@ namespace WinFormsApp1
         private void HandleActiveDocumentChanged(object? sender, EventArgs e)
         {
             var doc = DockPanelCtrl.ActiveDocument as WorkSpaceWin;
-            PendingListWin.ResetView();
+            if (doc == null)
+            {
+                return;
+            }
+
+            if (docChangeCheck && doc!.Text != ImageUtils.QuestInfo && WorkContext.Instance!.FinalData.TryGetValue(ImageUtils.QuestInfo, out var imgContext) && !imgContext.IsAllProcessed())
+            {
+                MessageBox.Show($"必须先处理 {ImageUtils.QuestInfo}");
+
+                DockPanelCtrl.BeginInvoke(() =>
+                {
+                    _allDocuments[ImageUtils.QuestInfo].Activate();
+                });
+
+            }
+            else
+            {
+                PendingListWin.ResetView();
+            }
         }
 
         OriginalDataWin DataSourceWin;
@@ -76,6 +95,16 @@ namespace WinFormsApp1
             }
         }
 
+        bool docChangeCheck = true;
+        public void IgnoreCheck()
+        {
+            docChangeCheck = false;
+        }
+        public void RecoveryCheck()
+        {
+            docChangeCheck = true;
+        }
+
         Dictionary<string, WorkSpaceWin> _allDocuments = [];
         public void ShowDocument(string imgName)
         {
@@ -90,7 +119,6 @@ namespace WinFormsApp1
             {
                 doc.ReloadDataSource(imgName);
             }
-
         }
 
         public void Clear()
@@ -115,7 +143,7 @@ namespace WinFormsApp1
 
                 需要手动处理的情况：
                     1.新增一级节点（任务ID所在节点）
-                    2.两个版本中对同一个属性，一个版本有值，另一个版本没有值
+                    2.两个版本中对同一个属性，两个版本都有中文但是内容不同
 
 
                 其他复杂修改不支持。

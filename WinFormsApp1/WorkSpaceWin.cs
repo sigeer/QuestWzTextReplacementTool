@@ -67,7 +67,7 @@ namespace WinFormsApp1
             WrapContents = false,
             Height = 36
         };
-        Button btnCompleted = new Button() { Text = "解决", AutoSize = true, Anchor = AnchorStyles.Top };
+        Button btnCompleted = new Button() { Text = "解决并移动到下一条", AutoSize = true, Anchor = AnchorStyles.Top };
         Label finalWording = new Label() { AutoSize = true, Anchor = AnchorStyles.Top };
         Button btnUseB = new Button() { Text = "使用新增项（新增）并解决", AutoSize = true };
         Button btnRemoveB = new Button() { Text = "移除新增项（放弃）并解决", AutoSize = true };
@@ -77,6 +77,7 @@ namespace WinFormsApp1
         WzImage _imgA;
         WzImage _imgB;
         ImageContext _imgC;
+        public ImageContext CurrentContext => _imgC;
         public WorkSpaceWin(string imgName)
         {
             _imgB = WorkContext.Instance!.NewData.GetValueOrDefault(imgName)!;
@@ -97,12 +98,12 @@ namespace WinFormsApp1
 
             btnNext.Click += (o, s) =>
             {
-                WorkContext.Instance.CurrentIndex++;
+                _imgC.CurrentIndex++;
                 ShowCurrentNode();
             };
             btnPrevious.Click += (o, s) =>
             {
-                WorkContext.Instance.CurrentIndex--;
+                _imgC.CurrentIndex--;
                 ShowCurrentNode();
             };
             btnNextConflict.Click += HandleClickNextConflict;
@@ -213,7 +214,7 @@ namespace WinFormsApp1
             {
                 return;
             }
-            _imgC.RemoveNewItem(nodeName);
+            _imgC.RemoveNewItem();
             ShowCurrentNode();
         }
 
@@ -224,20 +225,16 @@ namespace WinFormsApp1
             {
                 return;
             }
-            _imgC.InserNewItem(nodeName);
+            _imgC.InserNewItem();
             ShowCurrentNode();
         }
 
 
         private void HandleComplete(object? sender, EventArgs e)
         {
-            var nodeName = WorkContext.Instance?.CurrentNode;
-            if (nodeName == null)
-            {
-                return;
-            }
-            _imgC.HandlePendingItem(nodeName);
-            ShowCurrentNode();
+            _imgC.ResolvePendingItem();
+
+            HandleClickNextConflict(sender, e);
         }
 
         private void HandleFinalValueChanged(object? sender, DataGridViewCellEventArgs e)
@@ -291,34 +288,23 @@ namespace WinFormsApp1
 
         public void ResetView()
         {
-            WorkContext.Instance!.CurrentIndex = 0;
+            _imgC.CurrentIndex = 0;
             ShowCurrentNode();
         }
 
-
-        int _conflictIndex = 0;
         void HandleClickNextConflict(object? sender, EventArgs e)
         {
             if (WorkContext.Instance == null)
                 return;
 
-            if (_imgC.TryGetPendingItemsByIndex(_conflictIndex++, out var questName))
-            {
-                WorkContext.Instance.CurrentNode = questName!;
-                ShowNode();
-            }
+            _imgC.CurrentIndex++;
+            ShowNode();
         }
 
         void HandleClickPreConflict(object? sender, EventArgs e)
         {
-            if (WorkContext.Instance == null)
-                return;
-
-            if (_imgC.TryGetPendingItemsByIndex(_conflictIndex--, out var questName))
-            {
-                WorkContext.Instance.CurrentNode = questName!;
-                ShowNode();
-            }
+            _imgC.CurrentIndex--;
+            ShowNode();
 
         }
 
@@ -331,15 +317,16 @@ namespace WinFormsApp1
             btnRemoveB.Visible = false;
             finalPanel.BackColor = Color.White;
             finalWording.Text = "";
-            var allPendingItems = _imgC.GetAllPendingItems();
+            var allPendingItems = _imgC.GetValidPendingItems();
             if (allPendingItems.TryGetValue(WorkContext.Instance.CurrentNode, out var pendingNode))
             {
                 if (pendingNode.Type == PendingType.NewNode)
                 {
                     finalWording.Text = "当前节点是新增的节点。";
 
-                    btnUseB.Visible = !_imgC.Image.WzProperties.Contains(pendingNode.Node);
-                    btnRemoveB.Visible = !btnUseB.Visible;
+                    var hasData = _imgC.Image.WzProperties.Any(x => x.Name == pendingNode.Node.Name);
+                    btnUseB.Visible = !hasData;
+                    btnRemoveB.Visible = hasData;
                 }
 
                 if (!pendingNode.Processed)
@@ -350,16 +337,9 @@ namespace WinFormsApp1
 
             finalWording.Text += "点击解决使更改生效。";
 
-            infoLabel.Text = $"共有{WorkContext.Instance!.AllNodes.Count}条，有{allPendingItems.Count(x => !x.Value.Processed)}/{allPendingItems.Count}条需要手动处理。当前QuestId={WorkContext.Instance.CurrentNode}";
+            infoLabel.Text = $"共有{WorkContext.Instance.GetEffectiveNodes().Count}/{WorkContext.Instance!.AllNodes.Count}条，有{allPendingItems.Count(x => !x.Value.Processed)}/{allPendingItems.Count}条需要手动处理。当前QuestId={WorkContext.Instance.CurrentNode}";
 
-            var nodeA = _imgA.GetFromPath(WorkContext.Instance.CurrentNode);
-
-            var allA = ImageUtils.FlatSelectNode(nodeA);
-            //foreach (var item in allA)
-            //{
-            //    item.Name = item.Name.Replace(WorkContext.Instance!.SourceFile.Name + "\\", "").ToString();
-            //}
-
+            var allA = ImageUtils.FlatSelectNode(_imgA.GetFromPath(WorkContext.Instance.CurrentNode));
             var allB = ImageUtils.FlatSelectNode(_imgB.GetFromPath(WorkContext.Instance.CurrentNode));
             var allC = ImageUtils.FlatSelectNode(_imgC.Image.GetFromPath(WorkContext.Instance.CurrentNode));
 
@@ -396,7 +376,7 @@ namespace WinFormsApp1
                 }
                 gridB.Rows.Add(rowB);
 
-                if (propA?.Value != propB?.Value || propA?.Name != propB?.Name || propA?.Type != propB?.Type)
+                if (!ImageUtils.ZhCompare(propA?.Value, propB?.Value) || propA?.Name != propB?.Name || propA?.Type != propB?.Type)
                 {
                     rowA.DefaultCellStyle.BackColor = Color.LightGray;
                     rowB.DefaultCellStyle.BackColor = Color.LightGray;

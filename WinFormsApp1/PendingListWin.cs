@@ -38,7 +38,7 @@ namespace WinFormsApp1
 
                 if (_mainForm.DockPanelCtrl.ActiveDocument is WorkSpaceWin doc)
                 {
-                    WorkContext.Instance.CurrentNode = _dataSource[item];
+                    doc.CurrentContext.CurrentNode = _dataSource[item];
                     doc.ShowCurrentNode();
                 }
             };
@@ -66,10 +66,14 @@ namespace WinFormsApp1
                                 _listBox.Items.Clear();
                                 _dataSource.Clear();
 
-                                var current = WorkContext.Instance!.FinalData.GetValueOrDefault(doc.Text)?.GetAllPendingItems() ?? [];
+                                var current = doc.CurrentContext.GetValidPendingItems();
                                 foreach (var item in current)
                                 {
                                     var str = item.Key;
+                                    if (item.Value.Type == PendingType.NewNode)
+                                    {
+                                        str += " [+]";
+                                    }
                                     if (!item.Value.Processed)
                                     {
                                         str += "（待处理）";
@@ -80,7 +84,7 @@ namespace WinFormsApp1
                                 _listBox.EndUpdate();
                             }
 
-                            SyncSelectedItem();
+                            HandleNodeChange();
                         });
                     }
                 });
@@ -91,14 +95,9 @@ namespace WinFormsApp1
 
         public void HandleNodeChange()
         {
-            SyncSelectedItem();
-        }
-
-        void SyncSelectedItem()
-        {
             if (_mainForm.DockPanelCtrl.ActiveDocument is WorkSpaceWin doc)
             {
-                int index = WorkContext.Instance?.FinalData?.GetValueOrDefault(doc.Text)?.GetPendingIndex(WorkContext.Instance.CurrentNode) ?? -1;
+                int index = doc.CurrentContext.CurrentIndex;
                 if (index >= 0 && _listBox.Items.Count > 0)
                 {
                     _listBox.SelectedIndex = index; // 选中

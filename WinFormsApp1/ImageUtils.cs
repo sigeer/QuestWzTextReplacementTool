@@ -1,4 +1,6 @@
 ﻿using MapleLib.WzLib;
+using System.Globalization;
+using System.Text;
 
 namespace WinFormsApp1
 {
@@ -29,6 +31,41 @@ namespace WinFormsApp1
                     all.Add(new TextProperty(item.PropertyType.ToString(), GetPath(rootNode, item), item.WzValue?.ToString()));
                 }
             }
+        }
+
+        public static bool ZhCompare(string input1, string input2)
+        {
+            return NormalizeChineseTextForCompare(input1) == NormalizeChineseTextForCompare(input2);
+        }
+
+        static string NormalizeChineseTextForCompare(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+                return string.Empty;
+
+            // 1️⃣ Unicode 兼容规范化（非常重要）
+            s = s.Normalize(NormalizationForm.FormKC);
+
+            var sb = new StringBuilder(s.Length);
+
+            foreach (char c in s)
+            {
+                // 2️⃣ 忽略所有空白字符
+                if (char.IsWhiteSpace(c))
+                    continue;
+
+                // 3️⃣ 忽略中英文标点
+                var cat = Char.GetUnicodeCategory(c);
+                if (cat == UnicodeCategory.OtherPunctuation ||
+                    cat == UnicodeCategory.DashPunctuation ||
+                    cat == UnicodeCategory.InitialQuotePunctuation ||
+                    cat == UnicodeCategory.FinalQuotePunctuation)
+                    continue;
+
+                sb.Append(c);
+            }
+
+            return sb.ToString();
         }
 
         static string GetPath(WzImageProperty node, WzImageProperty subNode)

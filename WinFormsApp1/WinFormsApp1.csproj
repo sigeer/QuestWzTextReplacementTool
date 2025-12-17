@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="DockPanelSuite.ThemeVS2015" Version="3.1.1" />
+    <PackageReference Include="OpenCCNET" Version="1.1.0" />
   </ItemGroup>
 
 	<ItemGroup>

@@ -1,5 +1,6 @@
 ﻿using MapleLib.WzLib;
 using Serilog;
+using System;
 
 namespace WinFormsApp1
 {
@@ -28,7 +29,6 @@ namespace WinFormsApp1
                 _currentNode = value;
 
                 _currentIndex = AllNodes.FindIndex(x => x == _currentNode);
-                MainForm.PendingListWin.HandleNodeChange();
             }
         }
 
@@ -41,14 +41,13 @@ namespace WinFormsApp1
                 _currentIndex = value;
                 while (_currentIndex < 0)
                 {
-                    _currentIndex += WorkContext.Instance!.AllNodes.Count;
+                    _currentIndex += AllNodes.Count;
                 }
-                while (_currentIndex >= WorkContext.Instance!.AllNodes.Count)
+                while (_currentIndex >= AllNodes.Count)
                 {
-                    _currentIndex -= WorkContext.Instance!.AllNodes.Count;
+                    _currentIndex -= AllNodes.Count;
                 }
                 _currentNode = AllNodes[_currentIndex];
-                MainForm.PendingListWin.HandleNodeChange();
             }
         }
         public List<string> AllNodes { get; private set; }
@@ -57,11 +56,32 @@ namespace WinFormsApp1
         public Dictionary<string, WzImage?> NewData = [];
         public Dictionary<string, ImageContext> FinalData = [];
 
+        public List<string> GetEffectiveNodes()
+        {
+            if (FinalData.TryGetValue(ImageUtils.QuestInfo, out var questInfo))
+                return questInfo.GetEffectiveNodes();
+            else
+
+                return SourceFile.WzDirectory.GetImageByName(ImageUtils.QuestInfo).WzProperties.Select(x => x.Name).ToList();
+        }
+
+
         public void SetNewData(WzFile file)
         {
             foreach (var item in file.WzDirectory.WzImages)
             {
-                SetNewData(item);
+                if (item.Name == ImageUtils.QuestInfo)
+                {
+                    SetNewData(item);
+                }
+            }
+
+            foreach (var item in file.WzDirectory.WzImages)
+            {
+                if (item.Name != ImageUtils.QuestInfo)
+                {
+                    SetNewData(item);
+                }
             }
         }
 
@@ -77,12 +97,13 @@ namespace WinFormsApp1
 
             NewData[file.Name] = file;
             FinalData[file.Name] = new ImageContext(
+                this,
                 MainForm,
                 new WzImage(file.Name));
 
             if (file.Name == ImageUtils.QuestInfo)
             {
-                AllNodes = file.WzProperties.Select(x => x.Name).ToList();
+                AllNodes = file.WzProperties.Select(x => x.Name).Union(SourceFile.WzDirectory.GetImageByName(ImageUtils.QuestInfo).WzProperties.Select(x => x.Name)).ToList();
             }
 
             ApplyQuestImage(FinalData[file.Name]!, NewData[file.Name]!);

@@ -79,6 +79,8 @@ namespace WinFormsApp1
                         _mainForm.ShowDocument(item.Key);
                     }
                 }
+
+                _mainForm.PendingListWin.Activate();
             }
         }
 
@@ -110,7 +112,9 @@ namespace WinFormsApp1
                         SelectWzFile(file =>
                         {
                             WorkContext.Instance.SetNewData(file);
+                            _mainForm.IgnoreCheck();
                             DrawNewDataByWz();
+                            _mainForm.RecoveryCheck();
                         });
                     };
                 }
